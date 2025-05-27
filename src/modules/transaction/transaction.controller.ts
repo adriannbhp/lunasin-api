@@ -5,7 +5,7 @@ import { Response } from 'express';
 
 interface UploadBodyDto {
   invoice_number?: string;
-}   
+}
 
 @Controller() 
 export class TransactionController {
