@@ -14,70 +14,64 @@ export class TransactionService {
 
   public async verificationFile(payload) {
     const keyFileContent = Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf8');
-    // console.log(keyFileContent);
     const credentials = JSON.parse(keyFileContent);
-    // console.log(credentials);
     const client = new vision.ImageAnnotatorClient({ credentials });
+
     const trxData = await this.transactionDoc.findOne({
       invoice_number: payload.invoice_number
-    })
-    // console.log(trxData);
+    });
+
+    if (!trxData) {
+      return {
+        code: HttpStatus.NOT_FOUND,
+        success: false,
+        message: 'Transaction not found',
+      };
+    }
+
     const [result] = await client.textDetection({ image: { content: payload.file.buffer.toString('base64') } });
     const detections = result.textAnnotations;
     let counter = 0;
 
     if (detections && detections.length > 0) {
       detections.forEach((element: { description: string }) => {
-        // console.log('Element: ', element);
-
         if (element.description === process.env.TELKOM_ACCOUNT_NUMBER) {
-          // console.log('Description', element.description);
-          // console.log(
-          //   'TELKOM_ACCOUNT_NUMBER: ',
-          //   process.env.TELKOM_ACCOUNT_NUMBER,
-          // );
-
-          console.log(
-            element.description === process.env.TELKOM_ACCOUNT_NUMBER,
-          );
           counter++;
           return element;
         }
 
         const expectedAmountRaw =
-          trxData.amount.toString().replace(/[^0-9]/g, '') + '00'; // angka mentah
+          trxData.amount.toString().replace(/[^0-9]/g, '') + '00';
         const cleanOCR = element.description.replace(/[^0-9]/g, '');
-        console.log(
-          `[AMOUNT CHECK] OCR: ${cleanOCR} === Expected: ${expectedAmountRaw} =>`,
-          cleanOCR === expectedAmountRaw,
-        );
 
         if (cleanOCR === expectedAmountRaw) {
-          console.log('✔ Amount matched:', element.description);
           counter++;
           return element;
         }
       });
     } else {
-      return 'No text found in the image.';
+      return {
+        code: HttpStatus.BAD_REQUEST,
+        success: false,
+        message: 'No text found in the image.',
+      };
     }
 
-    let response = {}
     if (counter >= 2) {
-      response = {
+      return {
         code: HttpStatus.OK,
         success: true,
         message: 'Data Verified',
-      }
+      };
     } else {
-      response = {
+      return {
         code: HttpStatus.BAD_REQUEST,
         success: false,
         message: 'Data Invalid',
       };
     }
-    return response;
   }
+
 
   public async verificationFileBatch(payload: { file: Express.Multer.File, invoice_number: string }) {
     const keyFileContent = Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf8');
