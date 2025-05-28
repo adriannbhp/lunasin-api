@@ -14,23 +14,46 @@ export class TransactionService {
 
   public async verificationFile(payload) {
     const keyFileContent = Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf8');
+    // console.log(keyFileContent);
     const credentials = JSON.parse(keyFileContent);
+    // console.log(credentials);
     const client = new vision.ImageAnnotatorClient({ credentials });
     const trxData = await this.transactionDoc.findOne({
       invoice_number: payload.invoice_number
     })
+    // console.log(trxData);
     const [result] = await client.textDetection({ image: { content: payload.file.buffer.toString('base64') } });
     const detections = result.textAnnotations;
     let counter = 0;
 
     if (detections && detections.length > 0) {
-      detections.forEach(element => {
+      detections.forEach((element: { description: string }) => {
+        // console.log('Element: ', element);
+
         if (element.description === process.env.TELKOM_ACCOUNT_NUMBER) {
+          // console.log('Description', element.description);
+          // console.log(
+          //   'TELKOM_ACCOUNT_NUMBER: ',
+          //   process.env.TELKOM_ACCOUNT_NUMBER,
+          // );
+
+          console.log(
+            element.description === process.env.TELKOM_ACCOUNT_NUMBER,
+          );
           counter++;
           return element;
         }
-        const formattedAmount = trxData.amount.toLocaleString()
-        if (element.description === formattedAmount+'.00') {
+
+        const expectedAmountRaw =
+          trxData.amount.toString().replace(/[^0-9]/g, '') + '00'; // angka mentah
+        const cleanOCR = element.description.replace(/[^0-9]/g, '');
+        console.log(
+          `[AMOUNT CHECK] OCR: ${cleanOCR} === Expected: ${expectedAmountRaw} =>`,
+          cleanOCR === expectedAmountRaw,
+        );
+
+        if (cleanOCR === expectedAmountRaw) {
+          console.log('✔ Amount matched:', element.description);
           counter++;
           return element;
         }
@@ -44,23 +67,23 @@ export class TransactionService {
       response = {
         code: HttpStatus.OK,
         success: true,
-        message: 'Data Verified'
+        message: 'Data Verified',
       }
     } else {
       response = {
         code: HttpStatus.BAD_REQUEST,
         success: false,
-        message: 'Data Invalid'
-      }
+        message: 'Data Invalid',
+      };
     }
     return response;
   }
 
   public async getList(payload) {
-    const trxData = await this.transactionDoc.find()
+    const trxData = await this.transactionDoc.find();
 
     let response = {}
-    console.log('trxdata', trxData)
+    // console.log('trxdata', trxData)
     if (trxData) {
       response = {
         code: HttpStatus.OK,
@@ -78,26 +101,23 @@ export class TransactionService {
     return response;
   }
 
-  public async getDetail(payload) {
-    const trxData = await this.transactionDoc.findOne({
-      invoice_number: payload.invoice_number
-    })
+  public async getDetail(invoice_number: string) {
+    const trxData = await this.transactionDoc.findOne({ invoice_number });
 
-    let response = {}
     if (trxData) {
-      response = {
+      return {
         code: HttpStatus.OK,
         success: true,
         message: 'success',
-        data: trxData
-      }
+        data: trxData,
+      };
     } else {
-      response = {
+      return {
         code: HttpStatus.BAD_REQUEST,
         success: false,
-        message: 'Data Invalid'
-      }
+        message: 'Data Invalid',
+      };
     }
-    return response;
   }
+
 }
