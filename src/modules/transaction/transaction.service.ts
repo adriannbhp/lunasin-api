@@ -79,6 +79,47 @@ export class TransactionService {
     return response;
   }
 
+  public async verificationFileBatch(payload: { file: Express.Multer.File, invoice_number: string }) {
+    const keyFileContent = Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf8');
+    const credentials = JSON.parse(keyFileContent);
+    const client = new vision.ImageAnnotatorClient({ credentials });
+
+    const trxData = await this.transactionDoc.findOne({ invoice_number: payload.invoice_number });
+
+    if (!trxData) {
+      return {
+        success: false,
+        message: 'Invoice not found',
+        filename: payload.file.originalname,
+      };
+    }
+
+    const [result] = await client.textDetection({
+      image: { content: payload.file.buffer.toString('base64') },
+    });
+
+    let counter = 0;
+    const detections = result.textAnnotations;
+    if (detections && detections.length > 0) {
+      for (const element of detections) {
+        const text = element.description;
+        const expectedAmountRaw = trxData.amount.toString().replace(/[^0-9]/g, '') + '00';
+        const cleanOCR = text.replace(/[^0-9]/g, '');
+
+        if (text === process.env.TELKOM_ACCOUNT_NUMBER) counter++;
+        if (cleanOCR === expectedAmountRaw) counter++;
+
+        if (counter >= 2) break;
+      }
+    }
+
+    return {
+      success: counter >= 2,
+      message: counter >= 2 ? 'Data Verified' : 'Data Invalid',
+      filename: payload.file.originalname,
+    };
+  }
+
   public async getList(payload) {
     const trxData = await this.transactionDoc.find();
 

@@ -1,5 +1,16 @@
-import { Controller, Get, Post, Query, Body, UploadedFile, UseInterceptors, Res, HttpStatus } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  Controller,
+  Get,
+  Post,
+  Query,
+  Body,
+  UploadedFile,
+  UseInterceptors,
+  Res,
+  HttpStatus,
+  UploadedFiles
+} from "@nestjs/common";
+import { FileInterceptor, FilesInterceptor } from "@nestjs/platform-express";
 import { TransactionService } from './transaction.service';
 import { Response } from 'express';
 import { ApiBody, ApiConsumes, ApiOperation, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
@@ -45,6 +56,59 @@ export class TransactionController {
       });
     }
   }
+
+  @Post('/upload/batch')
+  @ApiOperation({ summary: 'Batch upload invoice images and verify via OCR' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        invoice_number: { type: 'string' },
+        image: {
+          type: 'array',
+          items: {
+            type: 'string',
+            format: 'binary',
+          },
+        },
+      },
+    },
+  })
+
+  @Post('/upload/batch')
+  @UseInterceptors(FilesInterceptor('image'))
+  async uploadFilesBatch(
+    @UploadedFiles() files: Express.Multer.File[],
+    @Body() body: UploadBodyDto,
+    @Res() res: Response,
+  ) {
+    if (!files || files.length === 0) {
+      return res.status(HttpStatus.BAD_REQUEST).json({
+        success: false,
+        message: 'No image files uploaded.',
+      });
+    }
+
+    const results = [];
+
+    for (const file of files) {
+      const result = await this.transactionService.verificationFileBatch({
+        file: file,
+        ...body,
+      });
+
+      results.push(result);
+    }
+
+    return res.status(HttpStatus.OK).json({
+      success: true,
+      message: 'Batch verification completed',
+      results,
+    });
+  }
+
+
 
   @Get('/list')
   @ApiOperation({ summary: 'Get all transaction records' })
