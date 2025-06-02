@@ -2,6 +2,7 @@ import { Injectable, HttpStatus } from '@nestjs/common';
 import { Transaction, TransactionDoc} from 'src/schemes/transaction';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { uploadToBucket } from 'src/modules/helper/google-storage.helper';
 
 const vision = require('@google-cloud/vision');
 
@@ -29,6 +30,9 @@ export class TransactionService {
         message: 'Transaction not found',
       };
     }
+
+    // Upload file to bucket
+    const publicUrl = await uploadToBucket(payload.file, payload.user_id);
 
     const [result] = await client.textDetection({ image: { content: payload.file.buffer.toString('base64') } });
     const detections = result.textAnnotations;
@@ -63,12 +67,14 @@ export class TransactionService {
         code: HttpStatus.OK,
         success: true,
         message: 'Data Verified',
+        file_url: publicUrl
       };
     } else {
       return {
         code: HttpStatus.BAD_REQUEST,
         success: false,
         message: 'Data Invalid',
+        file_url: publicUrl
       };
     }
   }
