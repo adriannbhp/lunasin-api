@@ -12,6 +12,7 @@ export class TransactionService {
     private transactionDoc:Model<TransactionDoc>
   ) {}
 
+  // g
   public async verificationFile(payload) {
     const keyFileContent = Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf8');
     const credentials = JSON.parse(keyFileContent);
