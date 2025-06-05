@@ -8,14 +8,21 @@ import {
   UseInterceptors,
   Res,
   HttpStatus,
-  UploadedFiles
-} from "@nestjs/common";
-import { FileInterceptor, FilesInterceptor } from "@nestjs/platform-express";
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { TransactionService } from './transaction.service';
 import { Response } from 'express';
-import { ApiBody, ApiConsumes, ApiOperation, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { UploadBodyDto } from "../dtos/upload-body.dto";
-
+import {
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { UploadBodyDto } from '../dtos/upload-body.dto';
+// import { ApprovePaymentDto } from '../dtos/approve-payment.dto';
+// import { ValidatePaymentDto } from '../dtos/validate-payment.dto';
 
 @ApiTags('Transaction')
 @Controller()
@@ -49,7 +56,6 @@ export class TransactionController {
       ...body,
     });
 
-
     if (result) {
       return res.status(result['code']).json({
         success: result['success'],
@@ -58,64 +64,19 @@ export class TransactionController {
     }
   }
 
-  @Post('/upload/batch')
-  @ApiOperation({ summary: 'Batch upload invoice images and verify via OCR' })
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        invoice_number: { type: 'string' },
-        image: {
-          type: 'array',
-          items: {
-            type: 'string',
-            format: 'binary',
-          },
-        },
-      },
-    },
-  })
-
-  @Post('/upload/batch')
-  @UseInterceptors(FilesInterceptor('image'))
-  async uploadFilesBatch(
-    @UploadedFiles() files: Express.Multer.File[],
-    @Body() body: UploadBodyDto,
-    @Res() res: Response,
-  ) {
-    if (!files || files.length === 0) {
-      return res.status(HttpStatus.BAD_REQUEST).json({
-        success: false,
-        message: 'No image files uploaded.',
-      });
-    }
-
-    const results = [];
-
-    for (const file of files) {
-      const result = await this.transactionService.verificationFileBatch({
-        file: file,
-        ...body,
-      });
-
-      results.push(result);
-    }
-
-    return res.status(HttpStatus.OK).json({
-      success: true,
-      message: 'Batch verification completed',
-      results,
-    });
-  }
-
-
-
   @Get('/list')
   @ApiOperation({ summary: 'Get all transaction records' })
   @ApiResponse({ status: 200, description: 'List retrieved' })
-  async getList(@Query() query: any, @Res() res: Response) {
-    const result = await this.transactionService.getList({});
+  async getList(
+    @Query()
+    query: {
+      status?: 'unpaid' | 'pending' | 'paid';
+      paidBy?: 'buyer' | 'seller';
+      sellerApprovalStatus?: 'pending' | 'approved' | 'rejected';
+    },
+    @Res() res: Response,
+  ) {
+    const result = await this.transactionService.getList(query);
 
     if (result) {
       return res.status(result['code']).json({
@@ -131,7 +92,10 @@ export class TransactionController {
   @ApiQuery({ name: 'invoice_number', required: true, type: String })
   @ApiResponse({ status: 200, description: 'Detail retrieved' })
   @ApiResponse({ status: 404, description: 'Transaction not found' })
-  async getDetail(@Query('invoice_number') invoice_number: string, @Res() res: Response) {
+  async getDetail(
+    @Query('invoice_number') invoice_number: string,
+    @Res() res: Response,
+  ) {
     const result = await this.transactionService.getDetail(invoice_number);
 
     if (result) {
@@ -142,4 +106,56 @@ export class TransactionController {
       });
     }
   }
+  @Post('/validate-payment')
+  async validatePayment(
+    @Body() body: ValidatePaymentDto,
+    @Res() res: Response,
+  ) {
+    try {
+      const result = await this.transactionService.validatePayment(body);
+
+      if (!result.success) {
+        return res.status(HttpStatus.BAD_REQUEST).json(result);
+      }
+
+      if ('paymentBy' in result && result.paymentBy === 'buyer') {
+        return res.status(HttpStatus.OK).json({
+          success: true,
+          message: 'Payment validated. Awaiting seller approval.',
+          approvalRequired: true,
+        });
+      } else {
+        return res.status(HttpStatus.OK).json({
+          success: true,
+          message: 'Payment validated. No approval required from seller.',
+          approvalRequired: false,
+        });
+      }
+    } catch (error) {
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: 'Internal Server Error',
+      });
+    }
+  }
+
+  @Post('/approve-payment')
+  @ApiOperation({ summary: 'Seller approves the payment' })
+   async approvePayment(@Body() body: ApprovePaymentDto, @Res() res: Response) {
+     try {
+       const approvalResult = await this.transactionService.approvePayment(body);
+
+       if (!approvalResult.success) {
+         return res.status(HttpStatus.BAD_REQUEST).json(approvalResult);
+       }
+
+       return res.status(HttpStatus.OK).json({
+         success: true,
+         message: 'Payment approved by seller.',
+       });
+     } catch (error) {
+       return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+         success: false,
+         message: 'Internal Server Error',
+       });
 }
