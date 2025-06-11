@@ -8,14 +8,20 @@ import {
   UseInterceptors,
   Res,
   HttpStatus,
-  UploadedFiles
-} from "@nestjs/common";
-import { FileInterceptor, FilesInterceptor } from "@nestjs/platform-express";
+  UploadedFiles,
+} from '@nestjs/common';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { TransactionService } from './transaction.service';
 import { Response } from 'express';
-import { ApiBody, ApiConsumes, ApiOperation, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { UploadBodyDto } from "../dtos/upload-body.dto";
-
+import {
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { UploadBodyDto } from '../dtos/upload-body.dto';
 
 @ApiTags('Transaction')
 @Controller()
@@ -49,7 +55,6 @@ export class TransactionController {
       ...body,
     });
 
-
     if (result) {
       return res.status(result['code']).json({
         success: result['success'],
@@ -57,59 +62,6 @@ export class TransactionController {
       });
     }
   }
-
-  @Post('/upload/batch')
-  @ApiOperation({ summary: 'Batch upload invoice images and verify via OCR' })
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        invoice_number: { type: 'string' },
-        image: {
-          type: 'array',
-          items: {
-            type: 'string',
-            format: 'binary',
-          },
-        },
-      },
-    },
-  })
-
-  @Post('/upload/batch')
-  @UseInterceptors(FilesInterceptor('image'))
-  async uploadFilesBatch(
-    @UploadedFiles() files: Express.Multer.File[],
-    @Body() body: UploadBodyDto,
-    @Res() res: Response,
-  ) {
-    if (!files || files.length === 0) {
-      return res.status(HttpStatus.BAD_REQUEST).json({
-        success: false,
-        message: 'No image files uploaded.',
-      });
-    }
-
-    const results = [];
-
-    for (const file of files) {
-      const result = await this.transactionService.verificationFileBatch({
-        file: file,
-        ...body,
-      });
-
-      results.push(result);
-    }
-
-    return res.status(HttpStatus.OK).json({
-      success: true,
-      message: 'Batch verification completed',
-      results,
-    });
-  }
-
-
 
   @Get('/list')
   @ApiOperation({ summary: 'Get all transaction records' })
@@ -131,7 +83,10 @@ export class TransactionController {
   @ApiQuery({ name: 'invoice_number', required: true, type: String })
   @ApiResponse({ status: 200, description: 'Detail retrieved' })
   @ApiResponse({ status: 404, description: 'Transaction not found' })
-  async getDetail(@Query('invoice_number') invoice_number: string, @Res() res: Response) {
+  async getDetail(
+    @Query('invoice_number') invoice_number: string,
+    @Res() res: Response,
+  ) {
     const result = await this.transactionService.getDetail(invoice_number);
 
     if (result) {

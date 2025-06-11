@@ -1,26 +1,29 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
-import { Transaction, TransactionDoc} from 'src/schemes/transaction';
+import { Transaction, TransactionDoc } from 'src/schemes/transaction';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { uploadToBucket } from 'src/modules/helper/google-storage.helper';
+import { v4 as uuidv4 } from 'uuid';
 
-const vision = require('@google-cloud/vision');
+import vision from '@google-cloud/vision';
 
 @Injectable()
 export class TransactionService {
   constructor(
     @InjectModel(Transaction.name)
-    private transactionDoc:Model<TransactionDoc>
+    private transactionDoc: Model<TransactionDoc>,
   ) {}
 
-  // g
   public async verificationFile(payload) {
-    const keyFileContent = Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf8');
+    const keyFileContent = Buffer.from(
+      process.env.GOOGLE_CREDENTIALS_BASE64,
+      'base64',
+    ).toString('utf8');
     const credentials = JSON.parse(keyFileContent);
     const client = new vision.ImageAnnotatorClient({ credentials });
 
     const trxData = await this.transactionDoc.findOne({
-      invoice_number: payload.invoice_number
+      invoice_number: payload.invoice_number,
     });
 
     if (!trxData) {
@@ -32,9 +35,13 @@ export class TransactionService {
     }
 
     // Upload file to bucket
-    const publicUrl = await uploadToBucket(payload.file, payload.user_id);
+    const fileExt = payload.file.originalname.split('.').pop();
+    const fileName = `${payload.invoice_number}-${uuidv4()}.${fileExt}`;
+    const publicUrl = await uploadToBucket(payload.file, fileName);
 
-    const [result] = await client.textDetection({ image: { content: payload.file.buffer.toString('base64') } });
+    const [result] = await client.textDetection({
+      image: { content: payload.file.buffer.toString('base64') },
+    });
     const detections = result.textAnnotations;
     let counter = 0;
 
@@ -63,82 +70,50 @@ export class TransactionService {
     }
 
     if (counter >= 2) {
+      await this.transactionDoc.findOneAndUpdate(
+        { invoice_number: payload.invoice_number },
+        {
+          $set: {
+            status: 'Pembayaran Terverifikasi',
+            updated_at: new Date(),
+          },
+        },
+        { new: true },
+      );
       return {
         code: HttpStatus.OK,
         success: true,
         message: 'Data Verified',
-        file_url: publicUrl
+        file_url: publicUrl,
       };
     } else {
       return {
         code: HttpStatus.BAD_REQUEST,
         success: false,
         message: 'Data Invalid',
-        file_url: publicUrl
+        file_url: publicUrl,
       };
     }
   }
 
-
-  public async verificationFileBatch(payload: { file: Express.Multer.File, invoice_number: string }) {
-    const keyFileContent = Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf8');
-    const credentials = JSON.parse(keyFileContent);
-    const client = new vision.ImageAnnotatorClient({ credentials });
-
-    const trxData = await this.transactionDoc.findOne({ invoice_number: payload.invoice_number });
-
-    if (!trxData) {
-      return {
-        success: false,
-        message: 'Invoice not found',
-        filename: payload.file.originalname,
-      };
-    }
-
-    const [result] = await client.textDetection({
-      image: { content: payload.file.buffer.toString('base64') },
-    });
-
-    let counter = 0;
-    const detections = result.textAnnotations;
-    if (detections && detections.length > 0) {
-      for (const element of detections) {
-        const text = element.description;
-        const expectedAmountRaw = trxData.amount.toString().replace(/[^0-9]/g, '') + '00';
-        const cleanOCR = text.replace(/[^0-9]/g, '');
-
-        if (text === process.env.TELKOM_ACCOUNT_NUMBER) counter++;
-        if (cleanOCR === expectedAmountRaw) counter++;
-
-        if (counter >= 2) break;
-      }
-    }
-
-    return {
-      success: counter >= 2,
-      message: counter >= 2 ? 'Data Verified' : 'Data Invalid',
-      filename: payload.file.originalname,
-    };
-  }
-
-  public async getList(payload) {
+  public async getList(payload: any) {
     const trxData = await this.transactionDoc.find();
 
-    let response = {}
+    let response = {};
     // console.log('trxdata', trxData)
     if (trxData) {
       response = {
         code: HttpStatus.OK,
         success: true,
         message: 'success',
-        data: trxData
-      }
+        data: trxData,
+      };
     } else {
       response = {
         code: HttpStatus.BAD_REQUEST,
         success: false,
-        message: 'Data Invalid'
-      }
+        message: 'Data Invalid',
+      };
     }
     return response;
   }
@@ -161,5 +136,4 @@ export class TransactionService {
       };
     }
   }
-
 }

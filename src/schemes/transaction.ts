@@ -1,7 +1,6 @@
 import { Document } from 'mongoose';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 
-
 type TransactionDoc = Transaction & Document;
 @Schema({
   collection: 'transaction',
