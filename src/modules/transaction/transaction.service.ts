@@ -83,12 +83,38 @@ export class TransactionService {
     }
 
     if (counter >= 2) {
+      const now = new Date();
+
+      const trxData = await this.transactionDoc.findOne({
+        invoice_number: payload.invoice_number,
+      });
+
+      if (!trxData) {
+        return {
+          code: HttpStatus.NOT_FOUND,
+          success: false,
+          message: 'Transaction not found',
+        };
+      }
+
+      const invoiceDate = trxData.invoice_date;
+      const dueDate = trxData.due_date;
+
+      if (!invoiceDate || !dueDate) {
+        return {
+          code: HttpStatus.BAD_REQUEST,
+          success: false,
+          message: 'Invoice date or due date is missing in transaction data.',
+        };
+      }
+
       await this.transactionDoc.findOneAndUpdate(
         { invoice_number: payload.invoice_number },
         {
           $set: {
             status: 'Pembayaran Terverifikasi',
-            updated_at: new Date(),
+            updated_at: now,
+            paid_at: now,
           },
         },
         { new: true },
@@ -109,26 +135,37 @@ export class TransactionService {
     }
   }
 
-  public async getList(payload: any) {
-    const trxData = await this.transactionDoc.find();
+  public async getList(query: any) {
+    const filter: Record<string, any> = {};
 
-    let response = {};
-    // console.log('trxdata', trxData)
-    if (trxData) {
-      response = {
+    if (query.status) {
+      filter.status = query.status;
+    }
+
+    if (query.invoice_number) {
+      filter.invoice_number = query.invoice_number;
+    }
+
+    if (query.name) {
+      filter.name = { $regex: query.name, $options: 'i' }; // Case-insensitive partial match
+    }
+
+    try {
+      const transactions = await this.transactionDoc.find(filter);
+
+      return {
         code: HttpStatus.OK,
         success: true,
-        message: 'success',
-        data: trxData,
+        message: 'Success',
+        data: transactions,
       };
-    } else {
-      response = {
-        code: HttpStatus.BAD_REQUEST,
+    } catch (error) {
+      return {
+        code: HttpStatus.INTERNAL_SERVER_ERROR,
         success: false,
-        message: 'Data Invalid',
+        message: 'Failed to retrieve data',
       };
     }
-    return response;
   }
 
   public async getDetail(invoice_number: string) {

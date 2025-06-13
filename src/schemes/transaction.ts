@@ -14,6 +14,13 @@ class Transaction {
   amount: number;
   @Prop({ type: String })
   status: string;
+  @Prop({ type: Date, immutable: true })
+  invoice_date: Date;
+  @Prop({ type: Date, immutable: true })
+  due_date: Date;
+  @Prop({ type: Date })
+  paid_at: Date;
+
 }
 
 const TransactionScheme = SchemaFactory.createForClass(Transaction);

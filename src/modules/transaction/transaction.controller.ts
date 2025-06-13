@@ -8,9 +8,8 @@ import {
   UseInterceptors,
   Res,
   HttpStatus,
-  UploadedFiles,
 } from '@nestjs/common';
-import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { TransactionService } from './transaction.service';
 import { Response } from 'express';
 import {
@@ -66,16 +65,26 @@ export class TransactionController {
   @Get('/list')
   @ApiOperation({ summary: 'Get all transaction records' })
   @ApiResponse({ status: 200, description: 'List retrieved' })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    type: String,
+    example: 'Menunggu Pembayaran',
+  })
+  @ApiQuery({
+    name: 'name',
+    required: false,
+    type: String,
+    example: 'PT Telkom Indonesia',
+  })
   async getList(@Query() query: any, @Res() res: Response) {
-    const result = await this.transactionService.getList({});
+    const result = await this.transactionService.getList(query);
 
-    if (result) {
-      return res.status(result['code']).json({
-        success: result['success'],
-        message: result['message'],
-        data: result['data'] ?? [],
-      });
-    }
+    return res.status(result.code).json({
+      success: result.success,
+      message: result.message,
+      data: result.data ?? [],
+    });
   }
 
   @Get('/detail')
